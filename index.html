@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>A-Tag-Game: Enhanced</title>
+    <style>
+        body { margin: 0; background: #0a0a1a; display: flex; flex-direction: column; align-items: center; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        canvas { background: #111; border: 4px solid #333; margin-top: 20px; box-shadow: 0 0 40px rgba(0,0,0,0.8); }
+        .controls { margin-top: 10px; text-align: center; line-height: 1.5; color: #aaa; }
+        #status { font-size: 24px; font-weight: bold; margin-top: 10px; color: #f1c40f; text-transform: uppercase; letter-spacing: 2px; }
+    </style>
+</head>
+<body>
+    <h1>A Tag Game</h1>
+    <div id="status">PLAYER 1 IS IT!</div>
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <div class="controls">
+        <b>Blue (P1):</b> WASD | <b>Red (P2):</b> Arrow Keys | <b>R:</b> Restart Round
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const statusText = document.getElementById('status');
+
+        let gameActive = true;
+        let round = 1;
+        let powerups = [];
+        const P_TYPES = {
+             SPEED: { color: '#00ff00', label: '⚡' },
+             JUMP: { color: '#ff00ff', label: '⬆️' },
+             SHIELD: { color: '#ffffff', label: '🛡️' }, 
+             MEGA: { color: '#f1c40f', label: '🌟' }   
+        };
+
+        let timeLeft = 120;
+        const gravity = 0.8;
+        let tagCooldown = 0;
+        let activeKeys = {};
+
+        const stars = Array.from({ length: 100 }, () => ({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            size: Math.random() * 2,
+            opacity: Math.random()
+        }));
+
+        let timeInterval = setInterval(() => {
+            if (gameActive) {
+                timeLeft--;
+                // Spawns every 10 seconds now
+                if (timeLeft % 10 === 0 && timeLeft > 0) { spawnPowerup(); }
+                if (timeLeft <= 0) { timeLeft = 0; endGame(); }
+            }
+        }, 1000);
+
+        function spawnPowerup() {
+            const plat = platforms[Math.floor(Math.random() * (platforms.length - 1)) + 1];
+            
+            // Rarity Logic
+            let rand = Math.random() * 100;
+            let selectedType;
+            if (rand < 5) selectedType = P_TYPES.MEGA;       // 5% Mega
+            else if (rand < 20) selectedType = P_TYPES.SHIELD; // 15% Shield
+            else if (rand < 60) selectedType = P_TYPES.SPEED;  // 40% Speed
+            else selectedType = P_TYPES.JUMP;                // 40% Jump
+
+            powerups.push({
+                x: plat.x + (plat.w / 2) - 12,
+                y: plat.y - 35,
+                w: 24, h: 24,
+                type: selectedType,
+                active: true
+            });
+        }
+
+        function resetRound() {
+            gameActive = true;
+            timeLeft = 120;
+            powerups = [];
+            players[0].x = 50; players[0].y = 100;
+            players[1].x = 720; players[1].y = 100;
+            players.forEach(p => {
+                p.vy = 0; p.speed = 6; p.jumpPower = -16; p.isShielded = false;
+            });
+            round++;
+            statusText.innerText = players[0].isIt ? "PLAYER 1 IS IT!" : "PLAYER 2 IS IT!";
+        }
+
+        function endGame() {
+            gameActive = false;
+            const loser = players.find(p => p.isIt);
+            statusText.innerText = `ROUND OVER! PLAYER ${loser.id} LOST!`;
+        }
+
+        const platforms = [
+            { x: 0, y: 460, w: 800, h: 40 }, 
+            { x: 100, y: 340, w: 150, h: 20 },
+            { x: 550, y: 340, w: 150, h: 20 },
+            { x: 300, y: 220, w: 200, h: 20 },
+            { x: 50, y: 120, w: 120, h: 15 },
+            { x: 630, y: 120, w: 120, h: 15 }
+        ];
+
+        let players = [
+            { id: 1, x: 50, y: 100, vy: 0, color: '#3498db', size: 30, speed: 6, jumpPower: -16, grounded: false, isIt: true, isShielded: false, keys: { up: 'w', left: 'a', right: 'd' } },
+            { id: 2, x: 720, y: 100, vy: 0, color: '#e74c3c', size: 30, speed: 6, jumpPower: -16, grounded: false, isIt: false, isShielded: false, keys: { up: 'ArrowUp', left: 'ArrowLeft', right: 'ArrowRight' } }
+        ];
+
+        window.addEventListener('keydown', (e) => {
+            activeKeys[e.key] = true;
+            if (e.key.toLowerCase() === 'r') resetRound();
+        });
+        window.addEventListener('keyup', (e) => activeKeys[e.key] = false);
+
+        function drawBackground() {
+            let sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            sky.addColorStop(0, "#0f0c29"); sky.addColorStop(0.5, "#302b63"); sky.addColorStop(1, "#24243e");
+            ctx.fillStyle = sky; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "white";
+            stars.forEach(s => {
+                ctx.globalAlpha = s.opacity;
+                ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2); ctx.fill();
+            });
+            ctx.globalAlpha = 1.0;
+        }
+
+        function update() {
+            if (!gameActive) return;
+            players.forEach(p => {
+                if (activeKeys[p.keys.left] && p.x > 0) p.x -= p.speed;
+                if (activeKeys[p.keys.right] && p.x < canvas.width - p.size) p.x += p.speed;
+                p.vy += gravity; p.y += p.vy; p.grounded = false;
+                
+                platforms.forEach(plat => {
+                    if (p.x + p.size > plat.x && p.x < plat.x + plat.w) {
+                        // Top Collision (Landing)
+                        if (p.vy >= 0 && p.y + p.size >= plat.y && p.y + p.size - p.vy <= plat.y) {
+                            p.y = plat.y - p.size; p.vy = 0; p.grounded = true;
+                        }
+                        // Bottom Collision (Anti-Phasing/Head bonk)
+                        if (p.vy < 0 && p.y <= plat.y + plat.h && p.y - p.vy >= plat.y + plat.h) {
+                            p.y = plat.y + plat.h; p.vy = 0;
+                        }
+                    }
+                });
+
+                powerups.forEach(pow => {
+                    if (pow.active && p.x < pow.x + pow.w && p.x + p.size > pow.x && p.y < pow.y + pow.h && p.y + p.size > pow.y) {
+                        pow.active = false;
+                        if (pow.type === P_TYPES.SPEED) p.speed = 10;
+                        if (pow.type === P_TYPES.JUMP) p.jumpPower = -22;
+                        if (pow.type === P_TYPES.SHIELD) p.isShielded = true;
+                        if (pow.type === P_TYPES.MEGA) { p.speed = 10; p.jumpPower = -22; }
+                        
+                        setTimeout(() => {
+                            p.speed = 6; p.jumpPower = -16; p.isShielded = false;
+                        }, 5000);
+                    }
+                });
+
+                if (activeKeys[p.keys.up] && p.grounded) { p.vy = p.jumpPower; p.grounded = false; }
+            });
+
+            let p1 = players[0], p2 = players[1];
+            let dist = Math.sqrt(((p1.x - p2.x)**2) + ((p1.y - p2.y)**2));
+            if (dist < 35 && tagCooldown <= 0) {
+                let attacker = p1.isIt ? p1 : p2;
+                let victim = p1.isIt ? p2 : p1;
+                
+                if (!victim.isShielded) {
+                    p1.isIt = !p1.isIt; p2.isIt = !p2.isIt; tagCooldown = 60; 
+                    statusText.innerText = p1.isIt ? "PLAYER 1 IS IT!" : "PLAYER 2 IS IT!";
+                    statusText.style.color = p1.isIt ? p1.color : p2.color;
+                }
+            }
+            if (tagCooldown > 0) tagCooldown--;
+        }
+
+        function draw() {
+            drawBackground();
+            ctx.fillStyle = '#89CFF0'; // Baby Blue
+            platforms.forEach(plat => ctx.fillRect(plat.x, plat.y, plat.w, plat.h));
+
+            powerups.forEach(pow => {
+                if (pow.active) {
+                    ctx.fillStyle = pow.type.color;
+                    ctx.fillRect(pow.x, pow.y, pow.w, pow.h);
+                    ctx.fillStyle = "black"; ctx.font = "14px Arial";
+                    ctx.fillText(pow.type.label, pow.x + 2, pow.y + 18);
+                }
+            });
+
+            players.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, p.size, p.size);
+                if (p.isShielded) {
+                    ctx.strokeStyle = "white"; ctx.lineWidth = 3;
+                    ctx.beginPath(); ctx.arc(p.x + p.size/2, p.y + p.size/2, p.size, 0, Math.PI * 2); ctx.stroke();
+                }
+                if (p.isIt) {
+                    ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 4;
+                    ctx.strokeRect(p.x - 4, p.y - 4, p.size + 8, p.size + 8);
+                }
+            });
+
+            ctx.fillStyle = "white"; ctx.font = "bold 28px Arial"; ctx.textAlign = "center";
+            ctx.fillText(`ROUND ${round} | TIME: ${timeLeft}`, canvas.width / 2, 40);
+
+            if (!gameActive) {
+                ctx.fillStyle = "rgba(0, 0, 0, 0.85)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = "white"; ctx.font = "bold 40px Arial";
+                ctx.fillText("MATCH FINISHED", canvas.width / 2, canvas.height / 2);
+                ctx.font = "20px Arial";
+                ctx.fillText("Press 'R' to Start Next Round", canvas.width / 2, canvas.height / 2 + 50);
+            }
+            ctx.textAlign = "start";
+        }
+
+        function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
+        gameLoop();
+    </script>
+</body>
+</html>
